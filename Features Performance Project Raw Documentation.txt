@@ -1,0 +1,113 @@
+Product ID	Product Position	Promotion	Product Category	Seasonal	Sales Volume	brand	url	name	description	price	currency	terms	section	season	material	origin
+
+Credit Decisioning
+Mortgage Approvals
+Stock Market Performance
+Payment Funnels
+Revenue Forecasting
+Attribution Models
+Upsell Opportunities
+User Segmentation
+Ad Performance
+Purchase Predictions
+User Segmentation
+Purchasing Trends
+Payment Funnels
+Purchase Conversion
+Market Basket Analysis
+
+teams(Team Department TeamLead)(dimension table)
+users(UserID	Age	Gender	EmploymentStatus	Location)(dimension table)
+tags(Tag	Description)(dimension table)
+dates(Date	Year	Month	MonthName	MonthYear	Quarter	Weekday	Day)(dimension table)
+features(FeatureID	FeatureName	Team	RolloutMonth	ProductOwner)(dimension table)
+scroll_depth(ScrollID	UserID	FeatureID	ScrollPercent	SessionDate)(fact table)
+click_logs(ClickID	UserID	FeatureID	ClickTimestamp	TimeSpentSeconds)(fact table)
+feedback_log(FeedbackID	UserID	FeatureID	Category	SentimentScore	Comment	Timestamp)(fact table)
+fecomponent_tags(FeatureID	Tag)(bridge table)
+
+The relationship cannot be created because each column contains duplicate values, Select at least one column that contains only unique value (remove duplicates/missing value do -> do this to handle error)
+We can't have 1 M:M relationship in power pivot(connecting table) so we connect it using bridge table so it become 2 1:M relationship
+
+Dashboard 12 width,40 height cell, Outline Border, B1:Q1(Title)(Sego UI 26), 1 cell(range between content), 3.2 cell(score card title)(Sego UI 16)3.3cell(score card value)(Sego UI 48), 12.6 cell (top chart), 5.2 cell(insight card title)5.3 cell(insight card values), 6.5 cell (middle chart), 16.3 cell (heatmap), 4.6 cell(doughnut bottom chart), 11.6 cell(bottom chart)
+
+Table connection : 
+
+transform data in power query
+1.create copy of data before cleaning (power query)
+2.create MissingFlag field in click_log_issues table (power query) > add column(costum column) > = if [UserID] = null or [FeatureID] = null then "Missing" else "Ok"
+3.Group by UserID,FeatureID,ClickTimestamp (power query) > Group by(Home tab) > named GroupedRows Operation All Rows [This being done for counting duplicate flag in those 3 field]
+4.create DuplicateFlag field (power query) > add column(costumn column) = if Table.RowCount([GroupedRows]) > 1 then "Duplicate" else "Ok"
+5.then expand the grouped rows(check all) > delete GroupedRows.UserID,FeatureID,ClickTimestamp [This being done to remove same field that exist in real table and in GroupedRows. ]
+6.create SourceTable field (power query) > add column(costum column) > = "table_name" [To identify what record from what table]
+7.unpivot MissingFlag, DuplicateFlag > Rename Attribute, Value into IssueType, IssueStatus
+8.filter IssueStatus field > uncheck select all or check duplicate/missing(uncheck ok) 
+9.summarize issue count > Group by SourceTable,IssueType,IssueStatus named it IssueCount > Operation Count Row
+10.do the same process for other table > (group by) field with unique/ID rows to identified duplicate/missing > rename table to tabe_name_issues_summary if theres missing/duplicate 
+11.merge all of the table with _summary into one > Append queries(as new)(home table) > three or more tables > named it data_quality_summary
+12.close & load to > only create connection(add this data to the model) 
+13.clean the data based on data_quality_summary > click_logs table > select whole table > remove duplicates/missing value
+14.do the same to other tables with duplicates/missing value
+15.dimension table ID field need duplicates/missing value removed
+16.close & load power query
+17.begin defining relationship between data tables > power pivot(diagram view) > drag tables we want to connect 
+18.connect table with 1:M relationship > if theres 1 M:M relationship use bridge table so it become 2 1:M relationship
+19.users  <UserID>  click_logs -> users <UserID> scroll_depth -> users <UserID> feedback_log [1:M relationship]
+20.features <FeatureID> click_logs -> features <FeatureID> scroll_depth -> features <FeatureID> feedback_log -> features <FeatureID> component_tags [1:M relationship]
+21.tags <Tag> component tags [1:M relationship]
+22.change TimeStamp(feedback_log) field data type to Date(power query) > close & load > connect tables in power pivot -> dates <Date/TimeStamp> feedback_log
+23.position dimension table on left side > bridge table on middle > fact table on right side in power pivot diagram view
+24.create DAX measures that will help to answer question that the team gave > switch to data view 
+25.click_logs table > ClickCount:=COUNTROWS(click_logs) 
+26.click_logs table > AvgTime:=AVERAGE(click_logs[TimeSpentSeconds])
+27.click_logs table > AvgScrollByTag:=CALCULATE(
+			AVERAGE(scroll_depth[ScrollPercent]),
+			TREATAS(VALUES(component_tags[FeatureID]),scroll_depth[FeatureID]))
+28.feedback_log table > AvgSentimentByTag:=CALCULATE(
+			AVERAGE(feedback_log[SentimentScore]),
+			TREATAS(VALUES(component_tags[FeatureID]),feedback_log[FeatureID]))
+29.users table > new field (AgeGroup) > =SWITCH(TRUE(),
+					[Age] < 18, "Under 18",
+					[Age] <=24, "18-24",
+					[Age] <=34, "25-34",
+					[Age] <=44, "35-44",
+					[Age] <=54, "45-54",
+					[Age] <=64, "55-64",
+					"65+")
+30.feedback_log table > TotalFeedback:=COUNTA(feedback_log[FeedbackID])
+31.feedback_log(power query) > costum column named BadFeedbackFlag > = if [SentimentScore] <= 2 then "Bad" else "Good" > close & load
+32.feedback_log(power pivot) > BadFeedbackCount:=CALCULATE(
+				COUNTROWS(feedback_log),
+				feedback_log[BadFeedbackFlag]="Bad")
+33.feedback_log > AvgSentiment:=AVERAGE(feedback_log[SentimentScore])
+34.click_logs > new field (FeatureClickCount) > =CALCULATE(
+							COUNTROWS(click_logs),
+							ALLEXCEPT(click_logs,click_logs[FeatureID]))
+35.clik_logs > new field (LowUsageFlag) > =IF(click_logs[FeatureClickCount] < 150, "Low", "Ok")
+36.sheet named PivotTables > 1.Which features are most used? > power pivot(pivot table) > existing sheet 
+37.drag FeatureName as Rows > drag ClickCount(DAX measures) as Values
+38.Rows filter (between) > 170-200 > 1.Which features are most used? (answered)
+39.sheet named PivotTables > 2.Which design tags perform best? > power pivot(pivot table) > existing sheet
+40.drag Tag as Rows > drag AvgScrollByTag(DAX measures) as Values
+41.Rows filter (Top 15) > 2.Which design tags perform best? (answered)
+42.sheet named PivotTables > 3.Do different types of people behave differently? > power pivot(pivot table) > existing sheet
+43.drag AgeGroup as Rows > drag AvgTime(DAX measures) as Values > 3.Do different types of people behave differently (answered)
+44.sheet named PivotTables > 4.What kind of feedback are we getting from the users? > power pivot(pivot table) > existing sheet
+45.drag Category as Rows > drag FeatureID as Values > 4.What kind of feedback are we getting from the users? (answered)
+46.sheet named PivotTables > 5.Do users like our features more overtime? > power pivot(pivot table) > existing sheet
+47.drag MonthName as Rows > drag AvgSentiment(DAX measures) as Values > sort A-Z > 5.Do users like our features more overtime? (answered)
+48.sheet named PivotTables > 6.Are any features underperforming? > power pivot(pivot table) > existing sheet
+49.drag FeatureName as Rows > drags ClickCount as Values > drags LowUsageFlag as filters(checked low only) 
+50.Rows filter (between) > 140-150 > 6.Are any features underperforming? (answered)
+51.sheet named PivotTables > 7.Is our data clean and reliable? > power pivot(pivot table) > existing sheet
+52.drag IssueStatus as Rows > drag IssuesCount as Values > 7.Is our data clean and reliable? (answered)
+53.sheet named Features Performance Dashboard > 12 width, 40 height cell > cell B1:P1 merge&center > Sego UI, 26 ,Middle Align, Center 
+54.FeatureName(Rows) & ClickCount(Values) > B3:D4 merge&center > features with low usage(Sego UI,16) > B5:D7 merge&center > =COUNTA(PowerPivots!A78:A80)(Sego UI, 48, Top Align) > Outside Border B3:D7 (question no.6)
+55.copy scorecard > features with low feedback(Sego UI, 16) > =GETPIVOTDATA("[Measures].[Count of FeedbackID]",PivotTables!$A$93,"[feedback_log].[BadFeedbackFlag]","[feedback_log].[BadFeedbackFlag].&[Bad]") (Sego UI, 48, Top Align)(question no. 8)
+56.MonthName(Rows) & AvgSentiment(Values) > Insert 2d line chart > cut & paste to Dashboard (question no.5) > Outside Border and clean the chart
+57.Insight card > Insight(Sego UI, 26) > ="-"&PivotTables!A6&" was used the most"&CHAR(10) (Sego UI, 14)> ="-"&GETPIVOTDATA("[Measures].[Sum of IssuesCount]",PivotTables!$A$87,"[data_quality_summary].[IssueStatus]","[data_quality_summary].[IssueStatus].&[Duplicate]")&" duplicate values found in the raw data"&CHAR(10) > ="-"&GETPIVOTDATA("[Measures].[Sum of IssuesCount]",PivotTables!$A$87,"[data_quality_summary].[IssueStatus]","[data_quality_summary].[IssueStatus].&[Missing]")&" missing values found in the raw datasets" (question no. 7)
+58.AgeGroup(Rows) AvgTime(Values) > Sort values(smallest to largest) > insert 2d clustered bar chart > cut & paste to Dashboard > Outsite Border and clean the chart(question no. 3)
+59.Category(Rows) FeedbackID(Values) > insert doughnut chart > cut & paste to Dashboard > Outside Border and clean the chart (question no. 4)
+60.FeatureName(Rows) ClickCount(Value) > Sort values between 179-200 (Top 5) > Insert 2d clustere bar chart > cut & paste to Dashboard > Outside Border and clean the chart (question no. 1)
+61.Tag(Rows) AvgScrollByTag(Values) > copy & paste(transpose) to Dashboard > values(conditional formatting, color scales(green,yellow,red) > all borders(question no. 2)
+62.View > uncheck Gridline, Formula Bar	
